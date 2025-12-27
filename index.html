@@ -5,17 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>JARVIS AI</title>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+        #brand { position: absolute; top: 20px; letter-spacing: 5px; opacity: 0.3; font-size: 12px; }
         .jarvis-container { position: relative; width: 200px; height: 200px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .main-circle { width: 80px; height: 80px; border: 3px solid #00d4ff; border-radius: 50%; box-shadow: 0 0 20px #00d4ff; transition: 0.3s; }
-        .listening .main-circle { scale: 1.2; box-shadow: 0 0 40px #fff; border-color: #fff; }
-        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 90%; min-height: 40px; line-height: 1.4; }
-        .input-area { margin-top: 20px; display: flex; gap: 10px; background: #111; padding: 10px; border-radius: 20px; border: 1px solid #333; }
-        input { background: none; border: none; color: #fff; outline: none; width: 150px; font-size: 16px; }
-        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-weight: bold; }
+        .main-circle { width: 80px; height: 80px; border: 3px solid #00d4ff; border-radius: 50%; box-shadow: 0 0 30px #00d4ff; transition: 0.4s; z-index: 5; }
+        .listening .main-circle { scale: 1.2; box-shadow: 0 0 50px #fff; border-color: #fff; }
+        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 85%; min-height: 50px; line-height: 1.4; text-transform: uppercase; letter-spacing: 1px; }
+        .input-area { margin-top: 20px; display: flex; gap: 10px; background: rgba(255,255,255,0.05); padding: 12px 18px; border-radius: 30px; border: 1px solid #222; }
+        input { background: none; border: none; color: #fff; outline: none; width: 160px; font-size: 16px; }
+        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-weight: bold; font-size: 18px; }
     </style>
 </head>
 <body>
+
+    <div id="brand">SYSTEM ACTIVE</div>
 
     <div class="jarvis-container" id="jarvisBox">
         <div class="main-circle"></div>
@@ -24,7 +27,7 @@
     <div id="status">Нажми на сферу или напиши текст</div>
 
     <div class="input-area">
-        <input type="text" id="userInput" placeholder="Спроси Джарвиса...">
+        <input type="text" id="userInput" placeholder="Запрос...">
         <button id="sendBtn">></button>
     </div>
 
@@ -33,7 +36,6 @@
         import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-        // ТВОИ ОБНОВЛЕННЫЕ ДАННЫЕ
         const firebaseConfig = {
             apiKey: "AIzaSyALqFZBU96sFUZUCZOao1Di3XsyGpC3tWU", 
             authDomain: "fadeai-19046.firebaseapp.com",
@@ -43,8 +45,10 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        
+        // Исправленный вызов модели (версия v1 для стабильности)
         const genAI = new GoogleGenerativeAI(firebaseConfig.apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: 'v1' });
 
         const statusText = document.getElementById('status');
         const jarvisBox = document.getElementById('jarvisBox');
@@ -52,22 +56,35 @@
         const sendBtn = document.getElementById('sendBtn');
         const synth = window.speechSynthesis;
 
-        // ГОЛОСОВОЙ ВВОД
+        // ГОЛОС (iPad Safari)
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
             recognition.lang = 'ru-RU';
+            recognition.continuous = false;
+
             jarvisBox.onclick = () => {
-                synth.speak(new SpeechSynthesisUtterance('')); // Разблокировка аудио
-                try { recognition.start(); statusText.innerText = "Слушаю..."; jarvisBox.classList.add('listening'); } 
-                catch (e) { statusText.innerText = "Микрофон занят"; }
+                synth.speak(new SpeechSynthesisUtterance('')); // Разблокировка звука
+                try { 
+                    recognition.start(); 
+                    statusText.innerText = "СЛУШАЮ..."; 
+                    jarvisBox.classList.add('listening'); 
+                } catch (e) { statusText.innerText = "МИКРОФОН УЖЕ ВКЛЮЧЕН"; }
             };
-            recognition.onresult = (e) => askJarvis(e.results[0][0].transcript);
+
+            recognition.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                askJarvis(text);
+            };
+
             recognition.onend = () => jarvisBox.classList.remove('listening');
-            recognition.onerror = (e) => statusText.innerText = "Ошибка микрофона: " + e.error;
+            recognition.onerror = (e) => {
+                if(e.error === 'not-allowed') statusText.innerText = "ДОСТУП ЗАПРЕЩЕН (АА -> Настройки)";
+                else statusText.innerText = "ОШИБКА: " + e.error;
+            };
         }
 
-        // ТЕКСТОВЫЙ ВВОД
+        // ТЕКСТ
         sendBtn.onclick = () => {
             if (userInput.value.trim()) {
                 askJarvis(userInput.value);
@@ -76,24 +93,22 @@
         };
 
         async function askJarvis(text) {
-            statusText.innerText = "Джарвис думает...";
+            statusText.innerText = "АНАЛИЗ ДАННЫХ...";
             try {
-                const result = await model.generateContent("Ты Джарвис, ИИ помощник. Ответь очень кратко: " + text);
+                const result = await model.generateContent("Ты Джарвис, очень краткий ИИ-помощник. Ответь: " + text);
                 const response = await result.response.text();
                 
                 statusText.innerText = response;
 
                 // Запись в Firebase
-                push(ref(db, 'history'), { q: text, a: response, t: Date.now() });
+                push(ref(db, 'history'), { q: text, a: response, time: Date.now() });
 
-                // Голос
+                // Озвучка
                 const utter = new SpeechSynthesisUtterance(response);
                 utter.lang = 'ru-RU';
                 synth.speak(utter);
             } catch (err) {
-                // ВЫВОД ТОЧНОЙ ПРИЧИНЫ ОШИБКИ
-                statusText.innerText = "ДЕТАЛИ ОШИБКИ: " + err.message;
-                console.error(err);
+                statusText.innerText = "ОШИБКА: " + err.message;
             }
         }
     </script>
