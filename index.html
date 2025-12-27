@@ -5,71 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>JARVIS AI</title>
     <style>
-        body {
-            margin: 0; padding: 0; background: #000; color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            overflow: hidden; height: 100vh; display: flex;
-            flex-direction: column; justify-content: center; align-items: center;
-        }
-
-        #brand { position: absolute; top: 30px; letter-spacing: 8px; font-weight: 200; opacity: 0.5; font-size: 14px; }
-
-        .jarvis-container {
-            position: relative; width: 250px; height: 250px;
-            display: flex; justify-content: center; align-items: center;
-            cursor: pointer; -webkit-tap-highlight-color: transparent;
-        }
-
-        .main-circle {
-            width: 90px; height: 90px; background: #000;
-            border: 3px solid #00d4ff; border-radius: 50%; z-index: 10;
-            box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        .orbit {
-            position: absolute; border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 50%; opacity: 0; transition: opacity 0.6s;
-        }
-
-        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        .listening .main-circle { scale: 1.1; box-shadow: 0 0 60px #00d4ff; border-color: #fff; }
-        .listening .orbit { opacity: 1; animation: rotate var(--dur) linear infinite; }
-
-        #status {
-            margin-top: 50px; font-size: 13px; text-transform: uppercase;
-            letter-spacing: 2px; color: #00d4ff; text-align: center;
-            padding: 0 20px; line-height: 1.5; min-height: 50px;
-        }
-
-        #btn-start {
-            margin-top: 20px; background: none; border: 1px solid #00d4ff;
-            color: #00d4ff; padding: 10px 25px; border-radius: 30px;
-            font-size: 12px; cursor: pointer; transition: 0.3s;
-        }
+        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .jarvis-container { position: relative; width: 200px; height: 200px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .main-circle { width: 80px; height: 80px; border: 3px solid #00d4ff; border-radius: 50%; box-shadow: 0 0 20px #00d4ff; transition: 0.3s; }
+        .listening .main-circle { scale: 1.2; box-shadow: 0 0 40px #fff; border-color: #fff; }
+        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 80%; min-height: 40px; }
+        
+        /* Поле ввода */
+        .input-area { margin-top: 20px; display: flex; gap: 10px; background: #111; padding: 10px; border-radius: 20px; border: 1px solid #333; }
+        input { background: none; border: none; color: #fff; outline: none; width: 150px; }
+        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: bold; }
+        #mic-hint { font-size: 10px; color: #444; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="brand">JARVIS SYSTEM</div>
-    
     <div class="jarvis-container" id="jarvisBox">
         <div class="main-circle"></div>
-        <div class="orbit" style="width: 140px; height: 140px; --dur: 4s;"></div>
-        <div class="orbit" style="width: 190px; height: 190px; --dur: 7s; border-style: dashed;"></div>
-        <div class="orbit" style="width: 240px; height: 240px; --dur: 12s; opacity: 0.1 !important;"></div>
     </div>
 
-    <div id="status">Нажмите на сферу или кнопку ниже</div>
-    <button id="btn-start">ВКЛЮЧИТЬ МИКРОФОН</button>
+    <div id="status">Нажми на сферу или напиши</div>
+
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Сообщение...">
+        <button id="sendBtn">></button>
+    </div>
+    
+    <div id="mic-hint">Если "Service not allowed" — проверь Настройки -> Safari -> Микрофон</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-        // ТВОИ ДАННЫЕ FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDj7EzcDZu7Sm09_DmybHTbPmYsM16StVw",
             authDomain: "fadeai-19046.firebaseapp.com",
@@ -87,83 +55,58 @@
 
         const statusText = document.getElementById('status');
         const jarvisBox = document.getElementById('jarvisBox');
-        const btnStart = document.getElementById('btn-start');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
         const synth = window.speechSynthesis;
 
-        let recognition;
+        // РАСПОЗНАВАНИЕ ГОЛОСА
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
         if (SpeechRecognition) {
-            recognition = new SpeechRecognition();
+            const recognition = new SpeechRecognition();
             recognition.lang = 'ru-RU';
-            recognition.continuous = false;
 
-            recognition.onstart = () => {
-                jarvisBox.classList.add('listening');
-                statusText.innerText = "Слушаю...";
+            jarvisBox.onclick = () => {
+                const utter = new SpeechSynthesisUtterance(''); // Разблокировка звука
+                synth.speak(utter);
+                try {
+                    recognition.start();
+                    statusText.innerText = "Слушаю...";
+                    jarvisBox.classList.add('listening');
+                } catch (e) { statusText.innerText = "Ошибка: " + e.message; }
             };
 
-            recognition.onresult = async (event) => {
-                const text = event.results[0][0].transcript;
-                statusText.innerText = "Вы: " + text;
-                await askJarvis(text);
+            recognition.onresult = (e) => {
+                const text = e.results[0][0].transcript;
+                askJarvis(text);
             };
 
-            recognition.onerror = (e) => {
-                jarvisBox.classList.remove('listening');
-                if (e.error === 'not-allowed') {
-                    statusText.innerText = "Ошибка: Доступ к микрофону запрещен!";
-                } else {
-                    statusText.innerText = "Ошибка: " + e.error;
-                }
-            };
-            
             recognition.onend = () => jarvisBox.classList.remove('listening');
-        } else {
-            statusText.innerText = "Ваш браузер не поддерживает голос.";
+            recognition.onerror = (e) => { statusText.innerText = "Ошибка: " + e.error; jarvisBox.classList.remove('listening'); };
         }
 
-        async function startSystem() {
-            // Разблокировка звука (обязательно для iOS)
-            const unlock = new SpeechSynthesisUtterance('');
-            synth.speak(unlock);
-
-            try {
-                // Прямой запрос микрофона
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                if (recognition) recognition.start();
-            } catch (e) {
-                statusText.innerText = "Разрешите доступ к микрофону в настройках!";
+        // ТЕКСТОВЫЙ ВВОД
+        sendBtn.onclick = () => {
+            if (userInput.value.trim()) {
+                askJarvis(userInput.value);
+                userInput.value = '';
             }
-        }
-
-        jarvisBox.addEventListener('click', startSystem);
-        btnStart.addEventListener('click', startSystem);
+        };
 
         async function askJarvis(text) {
             statusText.innerText = "Джарвис думает...";
             try {
-                const result = await model.generateContent("Ты - Джарвис. Отвечай очень кратко. Вопрос: " + text);
+                const result = await model.generateContent("Ты Джарвис. Ответь кратко: " + text);
                 const response = await result.response.text();
-                
                 statusText.innerText = response;
                 
-                // Сохраняем историю в твою базу Realtime Database
-                push(ref(db, 'history'), {
-                    question: text,
-                    answer: response,
-                    time: new Date().toLocaleString()
-                });
+                // Сохранение в Firebase
+                push(ref(db, 'history'), { q: text, a: response, time: Date.now() });
 
-                // Озвучка ответа
+                // Озвучка
                 const utter = new SpeechSynthesisUtterance(response);
                 utter.lang = 'ru-RU';
-                utter.pitch = 0.8; 
                 synth.speak(utter);
-
-            } catch (err) {
-                statusText.innerText = "Ошибка ИИ. Проверь API в Google Cloud.";
-            }
+            } catch (err) { statusText.innerText = "Ошибка ИИ"; }
         }
     </script>
 </body>
