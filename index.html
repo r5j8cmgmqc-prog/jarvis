@@ -9,13 +9,10 @@
         .jarvis-container { position: relative; width: 200px; height: 200px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .main-circle { width: 80px; height: 80px; border: 3px solid #00d4ff; border-radius: 50%; box-shadow: 0 0 20px #00d4ff; transition: 0.3s; }
         .listening .main-circle { scale: 1.2; box-shadow: 0 0 40px #fff; border-color: #fff; }
-        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 80%; min-height: 40px; }
-        
-        /* Поле ввода */
+        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 90%; min-height: 40px; line-height: 1.4; }
         .input-area { margin-top: 20px; display: flex; gap: 10px; background: #111; padding: 10px; border-radius: 20px; border: 1px solid #333; }
-        input { background: none; border: none; color: #fff; outline: none; width: 150px; }
-        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: bold; }
-        #mic-hint { font-size: 10px; color: #444; margin-top: 10px; }
+        input { background: none; border: none; color: #fff; outline: none; width: 150px; font-size: 16px; }
+        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -24,27 +21,23 @@
         <div class="main-circle"></div>
     </div>
 
-    <div id="status">Нажми на сферу или напиши</div>
+    <div id="status">Нажми на сферу или напиши текст</div>
 
     <div class="input-area">
-        <input type="text" id="userInput" placeholder="Сообщение...">
+        <input type="text" id="userInput" placeholder="Спроси Джарвиса...">
         <button id="sendBtn">></button>
     </div>
-    
-    <div id="mic-hint">Если "Service not allowed" — проверь Настройки -> Safari -> Микрофон</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
+        // ТВОИ ОБНОВЛЕННЫЕ ДАННЫЕ
         const firebaseConfig = {
-            apiKey: "AIzaSyDj7EzcDZu7Sm09_DmybHTbPmYsM16StVw",
+            apiKey: "AIzaSyALqFZBU96sFUZUCZOao1Di3XsyGpC3tWU", 
             authDomain: "fadeai-19046.firebaseapp.com",
             projectId: "fadeai-19046",
-            storageBucket: "fadeai-19046.firebasestorage.app",
-            messagingSenderId: "11846696282",
-            appId: "1:11846696282:web:6f74a162fa08e6b5318763",
             databaseURL: "https://fadeai-19046-default-rtdb.europe-west1.firebasedatabase.app/"
         };
 
@@ -59,29 +52,19 @@
         const sendBtn = document.getElementById('sendBtn');
         const synth = window.speechSynthesis;
 
-        // РАСПОЗНАВАНИЕ ГОЛОСА
+        // ГОЛОСОВОЙ ВВОД
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
             recognition.lang = 'ru-RU';
-
             jarvisBox.onclick = () => {
-                const utter = new SpeechSynthesisUtterance(''); // Разблокировка звука
-                synth.speak(utter);
-                try {
-                    recognition.start();
-                    statusText.innerText = "Слушаю...";
-                    jarvisBox.classList.add('listening');
-                } catch (e) { statusText.innerText = "Ошибка: " + e.message; }
+                synth.speak(new SpeechSynthesisUtterance('')); // Разблокировка аудио
+                try { recognition.start(); statusText.innerText = "Слушаю..."; jarvisBox.classList.add('listening'); } 
+                catch (e) { statusText.innerText = "Микрофон занят"; }
             };
-
-            recognition.onresult = (e) => {
-                const text = e.results[0][0].transcript;
-                askJarvis(text);
-            };
-
+            recognition.onresult = (e) => askJarvis(e.results[0][0].transcript);
             recognition.onend = () => jarvisBox.classList.remove('listening');
-            recognition.onerror = (e) => { statusText.innerText = "Ошибка: " + e.error; jarvisBox.classList.remove('listening'); };
+            recognition.onerror = (e) => statusText.innerText = "Ошибка микрофона: " + e.error;
         }
 
         // ТЕКСТОВЫЙ ВВОД
@@ -95,18 +78,23 @@
         async function askJarvis(text) {
             statusText.innerText = "Джарвис думает...";
             try {
-                const result = await model.generateContent("Ты Джарвис. Ответь кратко: " + text);
+                const result = await model.generateContent("Ты Джарвис, ИИ помощник. Ответь очень кратко: " + text);
                 const response = await result.response.text();
-                statusText.innerText = response;
                 
-                // Сохранение в Firebase
-                push(ref(db, 'history'), { q: text, a: response, time: Date.now() });
+                statusText.innerText = response;
 
-                // Озвучка
+                // Запись в Firebase
+                push(ref(db, 'history'), { q: text, a: response, t: Date.now() });
+
+                // Голос
                 const utter = new SpeechSynthesisUtterance(response);
                 utter.lang = 'ru-RU';
                 synth.speak(utter);
-            } catch (err) { statusText.innerText = "Ошибка ИИ"; }
+            } catch (err) {
+                // ВЫВОД ТОЧНОЙ ПРИЧИНЫ ОШИБКИ
+                statusText.innerText = "ДЕТАЛИ ОШИБКИ: " + err.message;
+                console.error(err);
+            }
         }
     </script>
 </body>
