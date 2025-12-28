@@ -1,116 +1,42 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>JARVIS AI</title>
-    <style>
-        body { margin: 0; padding: 0; background: #000; color: #fff; font-family: -apple-system, sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
-        #brand { position: absolute; top: 20px; letter-spacing: 5px; opacity: 0.3; font-size: 12px; }
-        .jarvis-container { position: relative; width: 200px; height: 200px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .main-circle { width: 80px; height: 80px; border: 3px solid #00d4ff; border-radius: 50%; box-shadow: 0 0 30px #00d4ff; transition: 0.4s; z-index: 5; }
-        .listening .main-circle { scale: 1.2; box-shadow: 0 0 50px #fff; border-color: #fff; }
-        #status { margin-top: 30px; color: #00d4ff; text-align: center; font-size: 14px; max-width: 85%; min-height: 50px; line-height: 1.4; text-transform: uppercase; letter-spacing: 1px; }
-        .input-area { margin-top: 20px; display: flex; gap: 10px; background: rgba(255,255,255,0.05); padding: 12px 18px; border-radius: 30px; border: 1px solid #222; }
-        input { background: none; border: none; color: #fff; outline: none; width: 160px; font-size: 16px; }
-        button { background: #00d4ff; border: none; color: #000; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-weight: bold; font-size: 18px; }
-    </style>
-</head>
-<body>
+<script>
+    const KEY = "AIzaSyALqFZBU96sFUZUCZOao1Di3XsyGpC3tWU";
+    
+    async function ask(text) {
+        document.getElementById('status').innerText = "АНАЛИЗ...";
+        try {
+            // Используем проверенную модель gemini-1.5-flash через v1beta
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${KEY}`;
+            
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: text }] }]
+                })
+            });
 
-    <div id="brand">SYSTEM ACTIVE</div>
-
-    <div class="jarvis-container" id="jarvisBox">
-        <div class="main-circle"></div>
-    </div>
-
-    <div id="status">Нажми на сферу или напиши текст</div>
-
-    <div class="input-area">
-        <input type="text" id="userInput" placeholder="Запрос...">
-        <button id="sendBtn">></button>
-    </div>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyALqFZBU96sFUZUCZOao1Di3XsyGpC3tWU", 
-            authDomain: "fadeai-19046.firebaseapp.com",
-            projectId: "fadeai-19046",
-            databaseURL: "https://fadeai-19046-default-rtdb.europe-west1.firebasedatabase.app/"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        
-        // Исправленный вызов модели (версия v1 для стабильности)
-        const genAI = new GoogleGenerativeAI(firebaseConfig.apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }, { apiVersion: 'v1' });
-
-        const statusText = document.getElementById('status');
-        const jarvisBox = document.getElementById('jarvisBox');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const synth = window.speechSynthesis;
-
-        // ГОЛОС (iPad Safari)
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
-            recognition.lang = 'ru-RU';
-            recognition.continuous = false;
-
-            jarvisBox.onclick = () => {
-                synth.speak(new SpeechSynthesisUtterance('')); // Разблокировка звука
-                try { 
-                    recognition.start(); 
-                    statusText.innerText = "СЛУШАЮ..."; 
-                    jarvisBox.classList.add('listening'); 
-                } catch (e) { statusText.innerText = "МИКРОФОН УЖЕ ВКЛЮЧЕН"; }
-            };
-
-            recognition.onresult = (e) => {
-                const text = e.results[0][0].transcript;
-                askJarvis(text);
-            };
-
-            recognition.onend = () => jarvisBox.classList.remove('listening');
-            recognition.onerror = (e) => {
-                if(e.error === 'not-allowed') statusText.innerText = "ДОСТУП ЗАПРЕЩЕН (АА -> Настройки)";
-                else statusText.innerText = "ОШИБКА: " + e.error;
-            };
-        }
-
-        // ТЕКСТ
-        sendBtn.onclick = () => {
-            if (userInput.value.trim()) {
-                askJarvis(userInput.value);
-                userInput.value = '';
+            const data = await response.json();
+            
+            // Если Google выдал ошибку в ответе, мы её увидим
+            if (data.error) {
+                document.getElementById('status').innerText = "ОШИБКА: " + data.error.message;
+                return;
             }
-        };
 
-        async function askJarvis(text) {
-            statusText.innerText = "АНАЛИЗ ДАННЫХ...";
-            try {
-                const result = await model.generateContent("Ты Джарвис, очень краткий ИИ-помощник. Ответь: " + text);
-                const response = await result.response.text();
-                
-                statusText.innerText = response;
-
-                // Запись в Firebase
-                push(ref(db, 'history'), { q: text, a: response, time: Date.now() });
-
-                // Озвучка
-                const utter = new SpeechSynthesisUtterance(response);
-                utter.lang = 'ru-RU';
-                synth.speak(utter);
-            } catch (err) {
-                statusText.innerText = "ОШИБКА: " + err.message;
-            }
+            const reply = data.candidates[0].content.parts[0].text;
+            document.getElementById('status').innerText = reply;
+            
+            const speech = new SpeechSynthesisUtterance(reply);
+            speech.lang = 'ru-RU';
+            window.speechSynthesis.speak(speech);
+            
+        } catch (err) {
+            document.getElementById('status').innerText = "СБОЙ СЕТИ. ПРОВЕРЬ КЛЮЧ.";
         }
-    </script>
-</body>
-</html>
+    }
+
+    document.getElementById('send').onclick = () => {
+        const val = document.getElementById('msg').value;
+        if(val) ask(val);
+    };
+</script>
